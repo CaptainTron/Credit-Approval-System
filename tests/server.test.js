@@ -1,20 +1,21 @@
 const request = require('supertest');
 
-
-// This will generate JWT token each time user sign in.
-const SignIn = { username: "JEST", password: "JEST" }
-describe('POST /sign_in', () => {
-  test('User Sign-In', async () => {
-    const response = await request('http://localhost:5000/auth').post(`/sign_in`).send(SignIn);
-    expect(response.body.message).toBe("You've successfully Signed In!");
+let request = `http://localhost:5000/api/register`
+const register = {
+  "first_name": "Vaibhav",
+  "last_name": "Yadav",
+  "age": 20,
+  "monthly_income": 20000,
+  "phone_number": 919450171212
+}
+describe('POST register', () => {
+  test('User register', async () => {
+    const response = await request(request).post(`/register`).send(register);
+    expect(response.body.message).toBe("You've successfully Registered In!");
     expect(response.body.status).toBe('Successful');
     expect(response.status).toBe(200);
   });
 });
-
-// Sample Note
-const createtask = { description: "This is from JEST for Testing Purpose Only", title: 'Testing With JEST' }
-const TOKEN = `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJJRCI6IjY1OTNiOTk4OTdkYmE3N2Y2Yzc1OWUwNCIsInVzZXJuYW1lIjoiSkVTVCIsImlhdCI6MTcwNDIxNDY2OSwiZXhwIjoxNzA0NjQ2NjY5fQ.nYOtmheakbImg9y631M_qZZ3EVGcO9WMo8pObzLX1m8`
 
 
 // // Test the POST /createnote route

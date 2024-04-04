@@ -1,39 +1,26 @@
-// Import Keys
-const keys = require("./config/keys")
-
 const express = require("express");
 const app = express()
 const cors = require('cors');
 app.use(cors());
 require('dotenv').config();
 app.use(express.json());
-// Bring the service file here and apply the changes
-require('./Services/cache');
-const authrouter = require('./Router/AuthRouter');
-const router = require('./Router/NoteRouter')
-const AuthMiddleware = require('./MiddleWare/Authorize')
+
+// This one for Service Workers
+// Service Worker to Inject Data directly to database 
+const serviceworder = require("./Router/serviceWorker_Router.js")
+app.use('/api', serviceworder)
 
 
-// Cluster Module
-const cluster = require('cluster')
-cluster.schedulingPolicy = cluster.SCHED_RR;
-app.use('/auth', authrouter);
-app.use('/api', AuthMiddleware, router);
+const router = require('./Router/CustomerRouter.js')
+app.use('/api', router);
 
-
-if (cluster.isMaster) {
-    cluster.fork();
-} else {
-    console.log("Now, I'm Child Process");
-    const PORT = keys.PORT;
-    const { ConnectDB } = require("./ConnecttoMongoDB/Connection")
-    const StartServer = async () => {
-        try {
-            await ConnectDB(keys.MONGOURL)
-            app.listen(PORT, console.log(`Server is Listening on PORT...... ${PORT}`))
-        } catch (err) {
-            console.log(err.message);
-        }
+const PORT = 5000;
+const StartServer = async () => {
+    try {
+        app.listen(PORT, console.log(`Server is Listening on PORT...... ${PORT}`))
+    } catch (err) {
+        console.log(err.message);
     }
-    StartServer();
 }
+StartServer();
+
