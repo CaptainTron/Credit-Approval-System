@@ -42,11 +42,11 @@ module.exports = (sequelize, DataTypes) => {
         },
         start_date: {
             type: DataTypes.FLOAT,
-            allowNull: true,
+            allowNull: false,
         },
         end_date: {
             type: DataTypes.FLOAT,
-            allowNull: true,
+            allowNull: false,
         },
     });
     return loans;

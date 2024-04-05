@@ -4,7 +4,7 @@ const Customer_loans = DBConfig.Customer_loans
 const loan = DBConfig.loans
 
 async function calculateCreditScore(customer_id, monthly_income) {
-    const historicalLoanData = await loan.findAll({ customer_id });
+    const historicalLoanData = await loan.findAll({ where: { customer_id } });
     // Initialize variables for credit score components
     let pastLoansPaidOnTime = 0;
     let numberOfLoansTaken = historicalLoanData.length; // Number of loans taken is the count of historical loans
@@ -15,7 +15,7 @@ async function calculateCreditScore(customer_id, monthly_income) {
     // Iterate over historical loan data to calculate credit score components
     // console.log(historicalLoanData[0].dataValues.EMIs_paid_on_Time)
     historicalLoanData.forEach(loan => {
-        if (loan.dataValues.EMIs_paid_on_time === loan.dataValues.tenure) {
+        if (loan.dataValues.EMIs_paid_on_time <= loan.dataValues.tenure) {
             pastLoansPaidOnTime++;
         }
         const currentDate = new Date();
@@ -45,32 +45,39 @@ async function calculateCreditScore(customer_id, monthly_income) {
     return creditScore;
 }
 
-const calculateMonthlyInstallment = (loan_amount, interest_rate, tenure) => {
-    // Convert annual interest rate to monthly interest rate
-    const monthly_interest_rate = (interest_rate / 12) / 100;
-
-    // Convert tenure from years to months
-    const n = tenure * 12;
-
-    // Calculate monthly installment using mortgage formula
-    //  calculateCreditScore(customer_id, monthly_income)
-    const monthly_installment = loan_amount * monthly_interest_rate * Math.pow(1 + monthly_interest_rate, n) / (Math.pow(1 + monthly_interest_rate, n) - 1);
-
-    // Round to two decimal places
-    return parseFloat(monthly_installment.toFixed(2));
-}
-
-const updatePaymentDetails = async (remainingAmount, loan_id, loan_completed) => {
+const updatePaymentDetails = async (remainingAmount, loan_id, loan_completed, EMIs_paid_on_Time) => {
 
     try {
-        await loan.update({ amount_paid: remainingAmount, loan_completed }, { where: { loan_id }, returning: true })
+        await loan.update({ amount_paid: remainingAmount, loan_completed, EMIs_paid_on_Time: EMIs_paid_on_Time + 1 }, { where: { loan_id }, returning: true })
     } catch (err) {
         console.log("ERR", err.message)
     }
 }
 
+
+// This functions will calculate the EMI for given loan, interestRate, and tenure in months
+function calculateEMI(loanAmount, interestRate, tenureMonths) {
+    let monthlyInterestRate = interestRate / (12 * 100);
+    let emi = (loanAmount * monthlyInterestRate * Math.pow(1 + monthlyInterestRate, tenureMonths)) / (Math.pow(1 + monthlyInterestRate, tenureMonths) - 1);
+    emi = Math.round(emi * 100) / 100;
+    return emi;
+}
+
+
+function calculateTimePeriod(months) {
+    let currentDate = new Date();
+    // Calculate start date
+    let startDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate());
+    // Calculate end date
+    let endDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + months, currentDate.getDate());
+    let formattedStartDate = startDate.getDate().toString().padStart(2, '0') + '-' + (startDate.getMonth() + 1).toString().padStart(2, '0') + '-' + startDate.getFullYear();
+    let formattedEndDate = endDate.getDate().toString().padStart(2, '0') + '-' + (endDate.getMonth() + 1).toString().padStart(2, '0') + '-' + endDate.getFullYear();
+
+    return { start_date: formattedStartDate, end_date: formattedEndDate };
+}
 module.exports = {
     calculateCreditScore,
-    calculateMonthlyInstallment,
     updatePaymentDetails,
+    calculateEMI,
+    calculateTimePeriod
 }

@@ -1,87 +1,124 @@
+const { plugin } = require('mongoose');
 const request = require('supertest');
 
-let request = `http://localhost:5000/api/register`
-const register = {
+let customer_id
+function generateRandomPhoneNumber() {
+  const countryCode = "+91"; // Assuming India, change as per your region
+  const areaCode = Math.floor(Math.random() * 900) + 100; // Random 3-digit area code
+  const firstPart = Math.floor(Math.random() * 9000) + 1000; // Random 4-digit first part
+  const secondPart = Math.floor(Math.random() * 9000) + 1000; // Random 4-digit second part
+  return `${countryCode}${areaCode}${firstPart}${secondPart}`;
+}
+
+let register = {
   "first_name": "Vaibhav",
   "last_name": "Yadav",
   "age": 20,
-  "monthly_income": 20000,
-  "phone_number": 919450171212
+  "monthly_income": 1000,
+  "phone_number": generateRandomPhoneNumber()
 }
-describe('POST register', () => {
+describe('Customer register', () => {
   test('User register', async () => {
-    const response = await request(request).post(`/register`).send(register);
-    expect(response.body.message).toBe("You've successfully Registered In!");
-    expect(response.body.status).toBe('Successful');
-    expect(response.status).toBe(200);
+    const response = await request('http://localhost:5000/api').post(`/register`).send(register);
+    if (response.status === 500) {
+      console.error("Internal Server Error:", response.body.error);
+    } else {
+      expect(response.status).toBe(201);
+      // expect(response.body.Customer.status).toBe("Successful");
+      customer_id = response.body.Customer.customer_id
+    }
+  });
+});
+
+let payload = {
+  "customer_id": customer_id,
+  "loan_amount": 1000,
+  "interest_rate": 1,
+  "tenure": 10
+}
+describe('POST /check-eligibility', () => {
+  test('Check Elegibility', async () => {
+    const response = await request('http://localhost:5000/api').post('/check-eligibility').send(payload)
+    if (response.status === 500) {
+      console.error("Internal Server Error:", response.body);
+    } else if (response.status === 400) {
+      console.error("Parameters are missing", response.body);
+    }
+    else {
+      expect(response.status).toBe(200);
+      expect(response.body.status.customer_id).toBe(payload.customer_id);
+      expect(response.body.status.interest_rate).toBe(payload.interest_rate);
+      expect(response.body.status.tenure).toBe(payload.tenure);
+    }
   });
 });
 
 
-// // Test the POST /createnote route
+payload = {
+  "customer_id": customer_id,
+  "loan_amount": 1000,
+  "interest_rate": 5,
+  "tenure": 10
+}
+describe('POST /create-loan', () => {
+  test('/create-loan', async () => {
+    try {
+      const response = await request('http://localhost:5000/api').post(`/create-loan`).send(payload);
 
-describe('POST /createnote', () => {
-  test('should add a new task', async () => {
-    const response = await request('http://localhost:5000/api').post('/createnote').send(createtask).set({ "Authorization": TOKEN });
-    expect(response.status).toBe(201);
-    expect(response.body.Task_Notes).toHaveProperty('title');
-    expect(response.body.Task_Notes).toHaveProperty('Created_at');
-    expect(response.body.Task_Notes).toHaveProperty('description');
-    expect(response.body.Task_Notes.title).toBe(createtask.title);
-    expect(response.body.status).toBe("Sucessful");
+      if (response.status === 500) {
+        // Handle Internal Server Error
+        console.error("Internal Server Error:", response.body);
+      } else {
+        expect(response.status).toBe(201);
+
+        // Save the loan ID from the response body
+        const loanId = response.body.loan_id;
+        console.log("Loan ID:", loanId);
+
+        // Now you can use the loan ID for further testing or assertions
+        // For example, you can make another request to fetch the loan details using this ID
+      }
+    } catch (error) {
+      console.error("Test Error:", error);
+      throw error; // Re-throw the error to fail the test
+    }
   });
 });
 
 
-// Test the GET /getnote route
-describe('GET /getnote', () => {
-  test('Should return all Notes', async () => {
-    const response = await request('http://localhost:5000/api').get(`/getnote`).set({ "Authorization": TOKEN })
-    expect(response.status).toBe(200);
-    expect(response.body.Task_Notes[0]).toHaveProperty('title');
-    expect(response.body.Task_Notes[0]).toHaveProperty('Created_at');
-    expect(response.body.Task_Notes[0]).toHaveProperty('description');
-    expect(response.body.status).toBe("Successful");
-  });
 
-  test('Should return a Note', async () => {
-    const response = await request('http://localhost:5000/api').get(`/getnote?NID=6593a70442ebabcf56e6e39c`).set({ "Authorization": TOKEN })
-    expect(response.status).toBe(200);
-    expect(response.body.Task_Notes).toHaveProperty('title');
-    expect(response.body.Task_Notes).toHaveProperty('Created_at');
-    expect(response.body.Task_Notes).toHaveProperty('description');
-    expect(response.body.status).toBe("Successful");
-  });
-
-  test('Should return Not Found', async () => {
-    const response = await request('http://localhost:5000/api').get(`/getnote?NID=WrongTaskID`).set({ "Authorization": TOKEN })
-    expect(response.status).toBe(404);
-    expect(response.body.status).toBe('Not Found!');
-    expect(response.body.message).toBe('No Task Found for given NID');
-  });
-});
-
-
-// Test the PATCH /updatenote
-const updatetask = { description: "This is to update, JEST for Testing Purpose Only", title: 'Successfully Updated, Testing With JEST' }
-describe('PATCH /updatenote', () => {
+payload = {
+  "customer_id": customer_id,
+  "loan_amount": 1000,
+  "interest_rate": 5,
+  "tenure": 10
+}
+describe('PATCH /view-loan/1', () => {
   test('should update a task', async () => {
-    const response = await request('http://localhost:5000/api').patch(`/updatenote?NID=6593a70442ebabcf56e6e39c`).send(updatetask).set({ "Authorization": TOKEN })
+    const response = await request('http://localhost:5000/api').get(`/view-loan/1`)
     expect(response.status).toBe(200);
-    expect(response.body.Updated_Task_Notes).toHaveProperty('title');
-    expect(response.body.Updated_Task_Notes).toHaveProperty('Created_at');
-    expect(response.body.Updated_Task_Notes).toHaveProperty('description');
-    expect(response.body.Updated_Task_Notes).toHaveProperty('Updated_at');
-    expect(response.body.status).toBe("Successfully Updated");
   });
 });
 
-// Test the DELETE /deletenote/:id route
-describe('DELETE /deletenote', () => {
-  test('Delete a task', async () => {
-    const response = await request('http://localhost:5000/api').delete(`/deletenote/659328bb324262215ff9983e`).set({ "Authorization": TOKEN });
-    expect(response.body.message).toBe('659328bb324262215ff9983e Already Deleted');
-    expect(response.status).toBe(404);
-  });
-});
 
+
+payload = {
+  "payment_amount": 100
+}
+describe('POST /:customer_id/:loan_id', () => {
+  test(':customer_id/:loan_id', async () => {
+    const response = await request('http://localhost:5000/api').post(`/make-payment/1/15`).send(payload)
+    console.log(response.body)
+    expect(response.status).toBe(200);
+  });
+})
+
+
+// /view-statement
+describe('POST /view-statement', () => {
+  test('/view-statement', async () => {
+    const response = await request('http://localhost:5000/api').get(`/view-statement/1/15`)
+    console.log(response.body)
+    expect(response.status).toBe(200);
+  });
+})

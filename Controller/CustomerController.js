@@ -3,8 +3,9 @@ const register = DBConfig.register
 const loans = DBConfig.loans
 
 const { calculateCreditScore,
-    calculateMonthlyInstallment,
-    updatePaymentDetails }
+    updatePaymentDetails,
+    calculateEMI,
+    calculateTimePeriod }
     = require("./CalculateCustomer")
 
 
@@ -18,14 +19,24 @@ const Register_newCustomer = async (req, res) => {
         res.status(201).json({ status: "Successful", Customer })
     } catch (err) {
         if (err.name === 'SequelizeUniqueConstraintError') {
-            res.status(500).json({ message: "Phone Number Already taken!", status: err.name })
+            res.status(400).json({ message: "Phone Number Already taken!", errorType: err.name })
+        } else {
+            res.status(500).json({ message: "Internal Server Error", errorType: err.name })
         }
     }
 }
 
 const check_eligibility = async (req, res) => {
     const { customer_id, loan_amount, interest_rate, tenure } = req.body;
-    let customer = await register.findOne({ customer_id })
+    if (!customer_id || !loan_amount || !interest_rate || !tenure) {
+        res.status(400).json({ message: "Invalid Request", status: "Missing Required Parameters" })
+        return;
+    }
+    let customer = await register.findOne({ where: { customer_id } })
+    if (customer == null) {
+        res.status(404).json({ message: "No Customer found with given Id", status: "Not found!" })
+        return;
+    }
     let creditScore = 0;
     if (customer.approved_limit < loan_amount) {
         creditScore = 0;
@@ -35,7 +46,7 @@ const check_eligibility = async (req, res) => {
 
     let approval = false;
     let corrected_interest_rate = interest_rate;
-    let monthly_installment = 0;
+    let monthly_installment = calculateEMI(loan_amount, interest_rate, tenure);
 
     if (creditScore > 50) {
         approval = true;
@@ -73,21 +84,28 @@ const create_loan = async (req, res) => {
         let loanDetails;
         let creditScore = 51
         let loan_approved = loan_amount
+        let responseBody;
 
 
         // Check if elegible or not!!
-        // let customer = await register.findOne({ customer_id })
-        // if (customer.approved_limit < loan_approved) {
-        //     creditScore = 0;
-        // } else {
-        //     creditScore = calculateCreditScore(customer_id, customer?.monthly_income ? customer.monthly_income : 0);
-        // }
+        let customer = await register.findOne({ where: { customer_id } })
+        if (customer == null) {
+            res.status(404).json({ status: "Customer not found!", message: "First Register yourself via registration!" })
+            return;
+        }
+        if (customer.approved_limit < loan_approved) {
+            creditScore = 0;
+        } else {
+            creditScore = calculateCreditScore(customer_id, customer?.monthly_income ? customer.monthly_income : 0);
+        }
 
         if (creditScore > 50) {
             loanApproved = true;
             let remaining_amount = loan_amount, EMIs_paid_on_Time = 0
             message = 'Loan approved';
-            monthly_installment = calculateMonthlyInstallment(loan_approved, interest_rate, tenure);
+            const { start_date, end_date } = calculateTimePeriod(tenure);
+            console.log(String(start_date), String(end_date))
+            monthly_installment = calculateEMI(loan_approved, interest_rate, tenure);
             loanDetails = await loans.create({
                 customer_id,
                 monthly_installment,
@@ -95,29 +113,19 @@ const create_loan = async (req, res) => {
                 interest_rate,
                 loan_approved,
                 EMIs_paid_on_Time,
+                start_date: String(start_date),
+                end_date: String(end_date)
             })
+
+            responseBody = { ...loanDetails.dataValues, loanApproved, message }
         } else {
             message = 'Loan not approved. Customer does not meet eligibility criteria.';
-            loanDetails = "Not Approved!"
+            responseBody = { message, loanApproved, customer_id }
         }
 
-        if (loanApproved) {
-            res.status(201).json({
-                status: {
-                    ...loanDetails.dataValues,
-                    loanApproved,
-                    message
-                }
-            })
-        } else {
-            res.status(400).json({
-                status: {
-                    ...loanDetails.dataValues,
-                    loanApproved,
-                    message
-                }
-            })
-        }
+        res.status(loanApproved ? 200 : 409).json({
+            status: responseBody
+        })
     } catch (err) {
         console.log(err.message)
         res.status(500).json({ status: 'Something Went Wrong' })
@@ -146,7 +154,6 @@ const view_loan = async (req, res) => {
     }
 }
 
-// This will delete Note provided NID (Note ID) as a path parameter.
 const make_payment = async (req, res) => {
     try {
         // Extract customer_id and loan_id from request parameters
@@ -159,7 +166,7 @@ const make_payment = async (req, res) => {
         let loanDetails = await loans.findOne({ where: { loan_id, customer_id } });
         loanDetails = loanDetails.dataValues
         if (loanDetails.loan_completed) {
-            res.status(400).json({ status: "Completed", message: 'Loan amount completed' });
+            res.status(200).json({ status: "Completed", message: 'Loan amount completed' });
             return
         }
         // Calculate the total amount due for all remaining EMIs
@@ -172,9 +179,9 @@ const make_payment = async (req, res) => {
             let remainingAmount = totalDueAmount - paymentAmount
             let amount_paid = loanDetails.amount_paid + paymentAmount
             if (loanDetails.loan_approved === amount_paid) { isCompleted = true }
-            updatePaymentDetails(amount_paid, loan_id, isCompleted);
+            updatePaymentDetails(amount_paid, loan_id, isCompleted, loanDetails.EMIs_paid_on_Time);
             // Send success response with remaining amount
-            res.status(201).json({ success: true, remaining_amount: remainingAmount, isCompleted: isCompleted });
+            res.status(200).json({ success: true, remaining_amount: remainingAmount, isCompleted: isCompleted });
         }
         else {
             // Payment amount exceeds total due amount, send error response
@@ -187,34 +194,51 @@ const make_payment = async (req, res) => {
 
 const view_statement = async (req, res) => {
     // Extract customer_id and loan_id from request parameters
-    const customer_id = req.params.customer_id;
-    const loan_id = req.params.loan_id;
+    try {
+        const customer_id = req.params.customer_id;
+        const loan_id = req.params.loan_id;
+        let loanDetails;
 
-    // Fetch loan details from the database based on customer_id and loan_id (pseudo-code)
-    // let loan = await Customer_loans.findOne({ customer_id, loan_id });
-    let loanDetails = await loans.findOne({ where: { customer_id, loan_id } });
-    loanDetails = loanDetails.dataValues
-    let amount_paid = loanDetails.amount_paid
+        // Fetch loan details from the database based on customer_id and loan_id (pseudo-code)
+        // let loan = await Customer_loans.findOne({ customer_id, loan_id });
+        try {
+            loanDetails = await loans.findOne({ where: { customer_id, loan_id } });
+            loanDetails = loanDetails.dataValues
+        } catch (err) {
+            res.status(404).json({ message: "No One found with given loan_id and customer_id" });
+            return;
+        }
 
-    let loan_completed = loanDetails.loan_completed
-    // Check if loan details exist
-    if (loanDetails) {
-        // Construct response body with loan details
-        const responseBody = {
-            customer_id: loanDetails.customer_id,
-            loan_id: loanDetails.loan_id,
-            principal: loanDetails.loan_amount,
-            interest_rate: loanDetails.interest_rate,
-            amount_paid: amount_paid,
-            monthly_installment: loanDetails.monthly_installment,
-            repayments_left: parseInt(loanDetails.tenure) - loanDetails.EMIs_paid_on_Time, // Calculate remaining EMIs
-            loan_completed
-        };
-        // Send response with statement of the particular loan
-        res.status(200).json(responseBody);
-    } else {
-        // Loan details not found, send error response
-        res.status(404).json({ error: 'Loan details not found' });
+        let amount_paid = loanDetails.amount_paid
+        let loan_completed = loanDetails.loan_completed
+        // Check if loan details exist
+        if (loanDetails) {
+            // Construct response body with loan details
+            let repayments_left = parseInt(loanDetails.tenure) - parseInt(loanDetails.EMIs_paid_on_Time)
+            let status = "Loan Pending!"
+            if (loan_completed) {
+                repayments_left = 0;
+                status = "Loan Completed!"
+            }
+            const responseBody = {
+                customer_id: loanDetails.customer_id,
+                loan_id: loanDetails.loan_id,
+                principal: loanDetails.loan_amount,
+                interest_rate: loanDetails.interest_rate,
+                amount_paid: amount_paid,
+                monthly_installment: loanDetails.monthly_installment,
+                repayments_left, // Calculate remaining EMIs
+                loan_completed,
+                status
+            };
+            // Send response with statement of the particular loan
+            res.status(200).json(responseBody);
+        } else {
+            // Loan details not found, send error response
+            res.status(404).json({ error: 'Loan details not found' });
+        }
+    } catch (err) {
+        res.status(500).json({ message: "Something Went Wrong!", err: err.message });
     }
 }
 
