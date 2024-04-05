@@ -2,7 +2,8 @@ const { Sequelize, DataTypes } = require('sequelize');
 require('dotenv').config()
 // Connect to PostgreSQL database
 const sequelize = new Sequelize('mydatabase', 'myuser', 'mypassword', {
-    host: 'localhost',
+    // FOr Docker Envirnment
+    host: 'postgres',
     dialect: 'postgres',
     port: 5432,
     logging: false
