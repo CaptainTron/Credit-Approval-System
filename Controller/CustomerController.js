@@ -10,10 +10,14 @@ const { calculateCreditScore,
 
 
 
-// This Function Will Register Customer
+// This Function Will Register Customer 
 const Register_newCustomer = async (req, res) => {
     try {
-        const { monthly_income } = req.body
+        const { monthly_income, first_name, last_name, age, phone_number } = req.body
+        if (!monthly_income || !first_name || !last_name || !phone_number || !age) {
+            res.status(400).json({ message: "Invalid Request", status: "Missing Required Parameters" })
+            return;
+        }
         let approved_limit = monthly_income * 36
         let Customer = await register.create({ ...req.body, approved_limit })
         res.status(201).json({ status: "Successful", Customer })
@@ -41,8 +45,9 @@ const check_eligibility = async (req, res) => {
     if (customer.approved_limit < loan_amount) {
         creditScore = 0;
     } else {
-        creditScore = calculateCreditScore(customer_id, customer?.monthly_income ? customer.monthly_income : 0);
+        creditScore = await calculateCreditScore(customer_id, customer?.monthly_income ? customer.monthly_income : 0, customer.approved_limit, loan_amount);
     }
+    console.log(creditScore)
 
     let approval = false;
     let corrected_interest_rate = interest_rate;
@@ -82,10 +87,11 @@ const create_loan = async (req, res) => {
         let loanApproved = false
         let monthly_installment = 0;
         let loanDetails;
-        let creditScore = 51
+        let creditScore = 0
         let loan_approved = loan_amount
         let responseBody;
-
+        let corrected_interest_rate = interest_rate;
+        let approval = false;
 
         // Check if elegible or not!!
         let customer = await register.findOne({ where: { customer_id } })
@@ -96,15 +102,31 @@ const create_loan = async (req, res) => {
         if (customer.approved_limit < loan_approved) {
             creditScore = 0;
         } else {
-            creditScore = calculateCreditScore(customer_id, customer?.monthly_income ? customer.monthly_income : 0);
+            creditScore = await calculateCreditScore(customer_id, customer?.monthly_income ? customer.monthly_income : 0, customer.approved_limit, loan_amount);
         }
 
         if (creditScore > 50) {
+            approval = true;
+        } else if (creditScore > 30) {
+            if (interest_rate <= 12) {
+                corrected_interest_rate = 12;
+            }
+            approval = true;
+        } else if (creditScore > 10) {
+            if (interest_rate <= 16) {
+                corrected_interest_rate = 16;
+            }
+            approval = true;
+        }
+
+
+        if (approval) {
             loanApproved = true;
             let remaining_amount = loan_amount, EMIs_paid_on_Time = 0
             message = 'Loan approved';
             const { start_date, end_date } = calculateTimePeriod(tenure);
-            console.log(String(start_date), String(end_date))
+            // console.log(String(start_date), String(end_date))
+            let interest_rate = corrected_interest_rate
             monthly_installment = calculateEMI(loan_approved, interest_rate, tenure);
             loanDetails = await loans.create({
                 customer_id,
@@ -117,7 +139,7 @@ const create_loan = async (req, res) => {
                 end_date: String(end_date)
             })
 
-            responseBody = { ...loanDetails.dataValues, loanApproved, message }
+            responseBody = { ...loanDetails.dataValues, loanApproved, message, message: "Interest Rate, might be changed!" }
         } else {
             message = 'Loan not approved. Customer does not meet eligibility criteria.';
             responseBody = { message, loanApproved, customer_id }

@@ -1,47 +1,56 @@
 const DBConfig = require("../db/mysql")
 const loan = DBConfig.loans
 
-async function calculateCreditScore(customer_id, monthly_income) {
+async function calculateCreditScore(customer_id, monthly_income, approved_limit, loan_amount) {
     const historicalLoanData = await loan.findAll({ where: { customer_id } });
-    // Initialize variables for credit score components
+
     let pastLoansPaidOnTime = 0;
-    let numberOfLoansTaken = historicalLoanData.length; // Number of loans taken is the count of historical loans
+    let numberOfLoansTaken = historicalLoanData.length;
     let loanActivityCurrentYear = 0;
     let loanApprovedVolume = 0;
+    let creditScore = 0;
 
+    // If no past loans and loan amount within approved limit, credit score is 100
+    if (numberOfLoansTaken === 0 && approved_limit >= loan_amount) {
+        return 100;
+    }
 
-    // Iterate over historical loan data to calculate credit score components
-    // console.log(historicalLoanData[0].dataValues.EMIs_paid_on_Time)
     historicalLoanData.forEach(loan => {
-        if (loan.dataValues.EMIs_paid_on_time <= loan.dataValues.tenure && loan.dataValues.loan_completed) {
+        if (loan.dataValues.EMIs_paid_on_Time <= loan.dataValues.tenure && loan.dataValues.loan_completed) {
             pastLoansPaidOnTime++;
         }
+
         const currentDate = new Date();
-        const loanStartDate = new Date(loan.start_date);
+        const loanStartDate = new Date(loan.dataValues.start_date);
         if (loanStartDate.getFullYear() === currentDate.getFullYear()) {
             loanActivityCurrentYear++;
         }
 
-        loanApprovedVolume += loan.loan_amount;
+        loanApprovedVolume += loan.dataValues.loan_approved;
     });
 
-    // Calculate credit score
-    let creditScore = 0;
+    // If sum of current loans exceeds approved limit, credit score is 0
+    if (loanApprovedVolume >= approved_limit) {
+        console.log("loanApprovedVolume", loanApprovedVolume)
+        return 0;
+    }
+
+    // Calculate credit score components and add to credit score
     creditScore += (pastLoansPaidOnTime / numberOfLoansTaken) * 100;
-    // console.log(numberOfLoansTaken)
-
-    creditScore += (loanActivityCurrentYear / 5) * 100;
-
-    // Assuming monthly salary is available, adjust this calculation accordingly
+    creditScore += (loanActivityCurrentYear / 12) * 100; // Assuming activity in the past 12 months
     const maxLoanVolumePercentage = 0.5; // Assuming 50% of monthly salary
     const loanVolumePercentage = loanApprovedVolume / (monthly_income * maxLoanVolumePercentage) * 100;
     creditScore += loanVolumePercentage;
 
     // Ensure credit score is not fractional
     creditScore = Math.round(creditScore);
+    console.log("creditScore", creditScore)
     if (!creditScore) creditScore = 0;
+
     return creditScore;
 }
+
+
 
 const updatePaymentDetails = async (remainingAmount, loan_id, loan_completed, EMIs_paid_on_Time) => {
 

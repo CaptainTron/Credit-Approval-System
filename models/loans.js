@@ -41,11 +41,11 @@ module.exports = (sequelize, DataTypes) => {
             defaultValue: false,
         },
         start_date: {
-            type: DataTypes.FLOAT,
+            type: DataTypes.DATE,
             allowNull: false,
         },
         end_date: {
-            type: DataTypes.FLOAT,
+            type: DataTypes.DATE,
             allowNull: false,
         },
     });
