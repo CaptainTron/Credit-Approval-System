@@ -1,6 +1,4 @@
 const DBConfig = require("../db/mysql")
-const Schema = DBConfig.Customer
-const Customer_loans = DBConfig.Customer_loans
 const loan = DBConfig.loans
 
 async function calculateCreditScore(customer_id, monthly_income) {
@@ -15,7 +13,7 @@ async function calculateCreditScore(customer_id, monthly_income) {
     // Iterate over historical loan data to calculate credit score components
     // console.log(historicalLoanData[0].dataValues.EMIs_paid_on_Time)
     historicalLoanData.forEach(loan => {
-        if (loan.dataValues.EMIs_paid_on_time <= loan.dataValues.tenure) {
+        if (loan.dataValues.EMIs_paid_on_time <= loan.dataValues.tenure && loan.dataValues.loan_completed) {
             pastLoansPaidOnTime++;
         }
         const currentDate = new Date();

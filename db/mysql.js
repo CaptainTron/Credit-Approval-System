@@ -18,12 +18,13 @@ const sequelize = new Sequelize('mydatabase', 'myuser', 'mypassword', {
 })();
 
 const db = {};
-db.Sequelize = Sequelize; 
+db.Sequelize = Sequelize;
 db.sequelize = sequelize;
 
-db.Customer = require("../models/customer_info.js")(sequelize, DataTypes); 
-db.Customer_loans = require("../models/Customer_loan.js")(sequelize, DataTypes);
- 
+// dataAlready present!
+// db.Customer = require("../models/customer_info.js")(sequelize, DataTypes); 
+// db.Customer_loans = require("../models/Customer_loan.js")(sequelize, DataTypes);
+
 db.register = require("../models/register.js")(sequelize, DataTypes);
 db.loans = require("../models/loans.js")(sequelize, DataTypes);
 
