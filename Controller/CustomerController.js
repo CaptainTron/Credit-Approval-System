@@ -145,7 +145,7 @@ const create_loan = async (req, res) => {
             responseBody = { message, loanApproved, customer_id }
         }
 
-        res.status(loanApproved ? 200 : 409).json({
+        res.status(loanApproved ? 201 : 409).json({
             status: responseBody
         })
     } catch (err) {
@@ -162,14 +162,14 @@ const view_loan = async (req, res) => {
 
         const loan = await loans.findOne({ where: { loan_id: loan_id } })
         if (loan === null) {
-            res.status(200).json({ status: "No Loan Found!" })
+            res.status(404).json({ status: "No Loan Found!" })
             return;
         }
         let customer_id = loan.dataValues.customer_id
         const { first_name, last_name, age, phone_number } = await register.findOne({ customer_id });
 
         // Send response
-        res.status(200).json({ status: { ...loan.dataValues, customerDetails: { first_name, last_name, age, phone_number, customer_id } } })
+        res.status(loan ? 200 : 400).json({ status: { ...loan.dataValues, customerDetails: { first_name, last_name, age, phone_number, customer_id } } })
     } catch (err) {
         console.log(err.message)
         res.status(400).json({ status: 'Invalid Input' })
@@ -222,7 +222,6 @@ const view_statement = async (req, res) => {
         let loanDetails;
 
         // Fetch loan details from the database based on customer_id and loan_id (pseudo-code)
-        // let loan = await Customer_loans.findOne({ customer_id, loan_id });
         try {
             loanDetails = await loans.findOne({ where: { customer_id, loan_id } });
             loanDetails = loanDetails.dataValues
